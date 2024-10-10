@@ -1,20 +1,21 @@
-from typing import List, Union, Dict, Optional
+from typing import Optional
 
-from app.auth.oauth2 import get_current_user
-from app.schemas.enums import RentalSort, SortDirection
-from fastapi import Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import JSONResponse
-from app.auth import oauth2
-from app.services import rental as rental_service
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi_pagination import Page
 from sqlalchemy.orm import Session
-from app.schemas.rental import RentalDisplay, RentalPeriod
-from app.utils import constants
-from app.services.rental import (
-    update_rental,
-    delete_rental,
-)
+
+from app.auth import oauth2
+from app.auth.oauth2 import get_current_user
 from app.core.database import get_db
+from app.schemas.enums import RentalSort, SortDirection
+from app.schemas.rental import RentalDisplay, RentalPeriod
+from app.services import rental as rental_service
+from app.services.rental import (
+    delete_rental,
+    update_rental,
+)
+from app.utils import constants
 
 # router = APIRouter()
 router = APIRouter(prefix="/rentals", tags=["rentals"])
@@ -36,10 +37,8 @@ def create_new_rental(
     return rental_service.create_rental(db, car_id, rental_period, current_user.id)
 
 
-@router.get(
-    "", response_model=Dict[str, Union[Optional[int], Optional[List[RentalDisplay]]]]
-)
-def get_rentals(  # noqa: F811
+@router.get("", response_model=Page[RentalDisplay])
+def get_rentals(
     car_id: int = Query(None),
     rental_id: int = Query(None),
     sort_by: RentalSort = Query(RentalSort.DATE),
@@ -50,7 +49,7 @@ def get_rentals(  # noqa: F811
     current_user=Depends(get_current_user),
 ):
     return rental_service.get_rentals(
-        db, current_user, rental_id, car_id, sort_by, sort_dir, skip, limit
+        db, current_user, rental_id, car_id, sort_by, sort_dir
     )
 
 

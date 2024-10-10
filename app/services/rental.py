@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import Dict, List, Union
 
 from fastapi import HTTPException, status
-from sqlalchemy import and_, func, or_, select
+from fastapi_pagination import Page
+from fastapi_pagination.ext.sqlalchemy import paginate
+from sqlalchemy import and_, or_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, aliased, joinedload
 
-import app.utils.constants as constants
 from app.models.car import DBCar
 from app.models.rental import DBRental
 from app.models.user import DBUser
@@ -94,24 +94,23 @@ def get_rental_by_id(db: Session, rental_id: int, current_user: DBUser):
 
 
 def get_rentals(
-    db,
+    db: Session,
     current_user: DBUser,
     rental_id: int = None,
     car_id: int = None,
     sort_by: RentalSort = RentalSort.DATE,
     sort_dir: SortDirection = SortDirection.ASC,
-    skip: int = 0,
-    limit: int = constants.QUERY_LIMIT_DEFAULT,
-) -> Dict[str, Union[int, List[DBRental]]]:
-    limit = min(limit, constants.QUERY_LIMIT_MAX)
-
-    q_filer = [
+) -> Page[DBRental]:
+    # Create the query filter based on provided parameters
+    q_filter = [
         DBRental.renter_id == rental_id if rental_id else True,
         DBRental.car_id == car_id if car_id else True,
     ]
-    if not current_user.is_admin():
-        q_filer.append(current_user.id == DBRental.renter_id)
 
+    if not current_user.is_admin():
+        q_filter.append(current_user.id == DBRental.renter_id)
+
+    # Determine sort field
     if sort_by == RentalSort.DATE:
         q_sort = DBRental.start_date
     elif sort_by == RentalSort.TOTAL_PRICE:
@@ -119,28 +118,17 @@ def get_rentals(
     else:
         q_sort = DBRental.status
 
+    # Apply sort direction
     if sort_dir == SortDirection.ASC:
         q_sort = q_sort.asc()
     else:
         q_sort = q_sort.desc()
 
-    total = db.query(func.count(DBRental.id)).filter(and_(*q_filer)).scalar()
+    # Create the query
+    query = db.query(DBRental).filter(and_(*q_filter)).order_by(q_sort)
 
-    rentals = (
-        db.query(DBRental)
-        .filter(and_(*q_filer))
-        .order_by(q_sort)
-        .offset(skip)
-        .limit(limit)
-        .all()
-    )
-    return {
-        "current_offset": skip,
-        "counts": len(rentals),
-        "total_counts": total,
-        "next_offset": (skip + limit) if len(rentals) == limit else None,
-        "rentals": rentals,
-    }
+    # Paginate the query using fastapi-pagination
+    return paginate(query)
 
 
 # Update a rental

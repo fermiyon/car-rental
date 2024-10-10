@@ -10,13 +10,14 @@ from fastapi import (
     UploadFile,
     status,
 )
+from fastapi_pagination import Page
 from sqlalchemy.orm import Session
 
 from app.auth import oauth2
 from app.core import database
 from app.models.user import DBUser
 from app.schemas.car import CarDisplay
-from app.schemas.enums import RentalSort, SortDirection, ReviewSort
+from app.schemas.enums import RentalSort, ReviewSort, SortDirection
 from app.schemas.rental import RentalDisplay
 from app.schemas.review import ReviewDisplay
 from app.schemas.user import (
@@ -28,10 +29,10 @@ from app.schemas.user import (
     create_user_public_display,
 )
 from app.services import car as car_service
-from app.services import user as user_service
 from app.services import rental as rental_service
-from app.utils import constants
 from app.services import review as review_service
+from app.services import user as user_service
+from app.utils import constants
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -211,16 +212,14 @@ def change_password(
 
 @router.get(
     "/{user_id}/rentals",
-    response_model=Dict[str, Union[Optional[int], Optional[List[RentalDisplay]]]],
+    response_model=Page[RentalDisplay],
 )
 def get_user_rentals(
     user_id: int = Path(...),
     sort_by: RentalSort = Query(RentalSort.DATE),
     sort_dir: SortDirection = Query(SortDirection.ASC),
-    skip: int = Query(0),
-    limit: int = Query(constants.QUERY_LIMIT_DEFAULT),
     db: Session = Depends(database.get_db),
-    current_user=Depends(oauth2.get_current_user),
+    current_user: DBUser = Depends(oauth2.get_current_user),
 ):
     if not current_user.is_admin() and current_user.id != user_id:
         raise HTTPException(
@@ -228,14 +227,15 @@ def get_user_rentals(
             detail="User cannot query other user's rentals.",
         )
 
-    return rental_service.get_rentals(
+    # Call the rental service to get rentals with pagination
+    rentals = rental_service.get_rentals(
         db=db,
         current_user=current_user,
         sort_by=sort_by,
         sort_dir=sort_dir,
-        skip=skip,
-        limit=limit,
     )
+
+    return rentals
 
 
 @router.get(
