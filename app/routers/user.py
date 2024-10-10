@@ -9,6 +9,7 @@ from fastapi import (
     Query,
     UploadFile,
     status,
+    Body,
 )
 from fastapi_pagination import Page
 from sqlalchemy.orm import Session
@@ -199,9 +200,10 @@ def read_cars_by_user(
     "/{user_id}/password",
     summary="Change password",
     description="This endpoint is used to change user's password.",
+    status_code=status.HTTP_200_OK,
 )
 def change_password(
-    new_password: str,
+    new_password: str = Body(...),
     user_id: int = Path(...),
     db: Session = Depends(database.get_db),
     current_user=Depends(oauth2.get_current_user),
@@ -241,6 +243,9 @@ def get_user_rentals(
 @router.get(
     "/{user_id}/reviews",
     response_model=Dict[str, Union[Optional[int], Optional[List[ReviewDisplay]]]],
+    summary="Get the reviews about a user",
+    description="This endpoint returns the reviews about a user as a renter "
+    "or as a owner of rentals",
 )
 def get_user_reviews(
     user_id: int = Path(...),
